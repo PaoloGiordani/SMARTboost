@@ -60,10 +60,10 @@ R>           ')
 - `randomizecv`       [FALSE] default is purged-cv (see paper); a time series or panel structure is automatically detected (see SMARTdata)
 
 ## Example1 with n = 1_000
-![](Example1_1k.png)
+![](examples/Example1_1k.png)
 
 ## Example1 with n = 1_000_000
-![](Example1_1m.png)
+![](examples/Example1_1m.png)
 
 ## Example1
 
