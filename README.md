@@ -6,9 +6,7 @@ SMARTboost (Smooth Additive Regression Trees) is described in the paper [SMARTbo
 
 Currently support only L2 loss, but extensions are planned.
 
-??????????? Say something about input features ???????????????????
-Julia version (Input features can be a be `Array{Float64/Float32}` or DataFrame (which is internally converted to a matrix of floats.))
-
+Inputs features must be vectors or matrices (while the Julia version also accepts DataFrame)
 
 ## Installation
 
@@ -58,6 +56,8 @@ R>           ')
 - `verbose`           [:Off] verbosity "On" or "Off"
 - `T`                 [Float32] Float32 is faster than Float64. If NaN output is produced (e.g. if true R2 is 1.0), switching to Flot64 should fix the problem.
 - `randomizecv`       [FALSE] default is purged-cv (see paper); a time series or panel structure is automatically detected (see SMARTdata)
+- `subsamplesharevs`  [1.0] row subs-sampling; if <1.0, only a randomly drawn (at each iteration) share of the sample is used in determining ι (which feature),μ,τ.
+- `subsampleshare_columns`  [1.0] column sub-sampling
 
 ## Example1 with n = 1_000
 ![](examples/Example1_1k.png)
@@ -67,7 +67,7 @@ R>           ')
 
 ## Example1
 
-```r-repl 
+```r-repl
 
 # install.packages("JuliaConnectoR")    # If needed, install JuliaConnectoR. https://github.com/stefan-m-lenz/JuliaConnectoR
 
@@ -162,5 +162,96 @@ pdp  = list[2]    # partial dependence (plot on y-axis), (npoints, J)
 # marginal effects
 tuple = SMARTboost$SMARTpartialplot(data,output$SMARTtrees,c(1,2,3,4),npoints=1000)
 
+# plot partial dependence
+#![](figures/Example1.png)
 
 ```
+
+## Example2 (CV and priors for panel data, Global Equity data  example)
+
+```r-repl
+
+# install.packages("JuliaConnectoR")    # If needed, install JuliaConnectoR. https://github.com/stefan-m-lenz/JuliaConnectoR
+
+# User's options
+
+path_julia_binaries = "I:\\Software\\Julia-1.4.2\\bin"   # string, location of Julia binaries (see ReadMe -> Installation)
+
+# Some options for SMARTboost
+cvdepth   = FALSE    # false to use the default depth (3), true to cv
+nfold     = 5        # nfold cv. 1 faster, default 5 is slower, but more accurate.
+
+# Optionally, set number_workers below
+# end user's options
+
+library(JuliaConnectoR)
+Sys.setenv(JULIA_BINDIR = path_julia_binaries)
+
+SMARTboost = juliaImport("SMARTboost")
+
+# Set the desired number of workers for parallelization   
+juliaEval('
+          number_workers  = 4  # desired number of workers, e.g. 4
+          using Distributed
+          nprocs()<number_workers ? addprocs( number_workers - nprocs()  ) : addprocs(0)
+          @everywhere using SMARTboost
+          ')
+
+df = read.csv('examples/data/GlobalEquityReturns.csv')
+
+# prepare data; sorting dataframe by date is required by block-CV.
+df = df[order(df$date, decreasing = FALSE),]
+
+# compute loglikdivide (this is a panel, where positive average cross-correlation will result in lld > 1)
+lld = SMARTboost$SMARTloglikdivide(data$excessret,data$date,overlap=0)
+"loglikdivide "; lld
+
+# We now include lld in param, replacing the default value of 1
+param   = SMARTboost$SMARTparam(loglikdivide = lld,overlap=0)     
+
+# SMARTdata() in R requires vectors or matrices (the Julia version also accepts DataFrames)
+# Notice the input df$date. In a panel, this ensures that block-cv is done correctly.
+data   = SMARTboost$SMARTdata(df$excessret,as.matrix(df[,4:8]),param,df$date,fnames=names(df)[4:8])  # fnames is optional; if omitted, features will be named features1,features2,...
+
+# alternative
+#x = df[, c('logCAPE', 'momentum', 'vol3m', 'vol12m')]; data   = SMARTboost$SMARTdata(df$excessret,as.matrix(x),param,df$date,fnames=c('logCAPE', 'momentum', 'vol3m', 'vol12m'))  
+
+if (cvdepth==FALSE){
+  output = SMARTboost$SMARTfit(data,param)                # default depth
+} else {
+  output = SMARTboost$SMARTfit(data,param,paramfield='depth',cv_grid=c(1,2,3,4),stopwhenlossup=TRUE)  # starts at depth = 1, stops as soon as loss increases
+}
+
+# See Example1 for forecasting, variable importance, partial dependence, marginal effects
+
+```
+
+How to do a train-validation-test split in SMARTboost.
+Notice that the default is to re-fit the model (with the cross-validated tuning parameters) on the entire data (train+validation), as is done in n-fold CV, even if nfold = 1. If you wish to skip this step (for speed or for comparison with other methods), set nofullsample = TRUE in SMARTfit.
+When nfold = 1, the default is to use the last 30% of the data as validation test ('approximately' 30% in some cases because of purged validation). To change this default, set e.g. sharevalidation = 0.2 for the last 20% of the sample, or sharevalidation = 1000 for the last 1000 observations. Setting sharevalidation to an integer switches the default to nfold = 1.
+
+
+# Some suggestions for speeding up SMARTboost.
+
+Example of approximate computing time for 100 trees, depth = 4, using 8 workers on an AMD EPYC 7542, dgp  linear. (dgp is linear. 100 trees are sufficient in most applications.)
+
+| n x p             |  Minutes for 100 trees |
+|-------------------|:----------------------:|
+| 100k x 10         |      1.7'              |
+| 1m x 10           |       17'              |
+| 10m x 10          |      170'              |
+|                   |                        |
+| 100k x 100        |       9'               |
+| 1m x 100          |      85'               |
+| 10m x 100         |     850'               |
+
+
+SMARTboost runs much faster (particularly with large n) with 4-8 cores than with one, after the initial one-off cost.
+If you are running on few cores, consider limiting depth <= 3.
+
+With large n:
+- Use a single validation sample instead of the default 5-fold cv (param$nfold=1). Additionally, in SMARTfit, set nofullsample = TRUE further reduces computing time by roughly 60% (at the cost of a modest efficiency loss.) nofullsample = TRUE is also required if you want to have a train-validation-test split, so that the model is only fit on the train set (the default will use a validation test to CV, and then re-train on the train+validation at the optimum parameter values).
+- Computing time increases rapidly with param$depth in smooth trees. If you cv tree depth, start at a low value and stop as soon as there is
+  no sizable improvement (set stopwhenlossup = TRUE in SMARTfit). With 8 workers, as a rule of thumb, computing times double if depth <- depth + 1.
+- set stderulestop = 0.05 or 0.1 to stop iterations when the loss is no longer decreasing sizably (at a cost of a small loss in performance.)
+- row and column subs-sampling are supported.
