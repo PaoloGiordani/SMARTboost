@@ -6,7 +6,9 @@ SMARTboost (Smooth Additive Regression Trees) is described in the paper [SMARTbo
 
 Currently support only L2 loss, but extensions are planned.
 
-Inputs features must be vectors or matrices (while the Julia version also accepts DataFrame)
+Inputs features must be vectors or matrices (while the Julia version also accepts DataFrame).
+
+Troubleshooting: if any output is NaN, switch to T="Float64", i.e. param = SMARTparam( ..., T="Float64") in the Example below. The default Float32 cuts computing time in half and is quite robust in Julia, but for reasons I don't understand it can give NaN when output is translated to R. (Suggestions welcome!).    
 
 ## Installation
 
@@ -120,7 +122,7 @@ f_test = f_1(x_test[,1],b1)+f_2(x_test[,2],b2)+f_3(x_test[,3],b3)+f_4(x[,4],b4)
 y      = f + rnorm(n)*stde
 
 # set up SMARTparam and SMARTdata, then fit and predit
-param  = SMARTboost$SMARTparam( nfold = nfold,verbose = "Off" )
+param  = SMARTboost$SMARTparam( nfold = nfold,verbose = "Off", T="Float32" )  # switch to T="Float64" is output is NaN
 data   = SMARTboost$SMARTdata(y,x,param)
 
 if (cvdepth==FALSE){
