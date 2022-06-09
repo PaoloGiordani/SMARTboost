@@ -160,7 +160,11 @@ q    = list[1]    # values at which partial dependence is computed, (plot on x-a
 pdp  = list[2]    # partial dependence (plot on y-axis), (npoints, J)
 
 # marginal effects
-tuple = SMARTboost$SMARTpartialplot(data,output$SMARTtrees,c(1,2,3,4),npoints=1000)
+tuple = SMARTboost$SMARTmarginaleffect(data,output$SMARTtrees,c(1,2,3,4),npoints=1000)
+
+# To compute marginal effect at one point x0 rather than over a grid, set npoints = 1 and other_xs = x0 (a p vector, p the number of features), e.g.
+# tuple = SMARTboost$SMARTmarginaleffect(data,output$SMARTtrees,c(1,2,3,4),other_xs=x0,npoints=1)
+
 
 # plot partial dependence
 #![](figures/Example1.png)
