@@ -116,7 +116,7 @@ juliaEval('
 
 # generate data
 x      = matrix(rnorm(n*p),nrow = n,ncol = p)
-x_test = matrix(rnorm(n_test*p),nrow = n,ncol = p)
+x_test = matrix(rnorm(n_test*p),nrow = n_test,ncol = p)
 f      = f_1(x[,1],b1)+f_2(x[,2],b2)+f_3(x[,3],b3)+f_4(x[,4],b4)
 f_test = f_1(x_test[,1],b1)+f_2(x_test[,2],b2)+f_3(x_test[,3],b3)+f_4(x[,4],b4)
 y      = f + rnorm(n)*stde
